@@ -47,20 +47,7 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-#define PORT_LED0 GPIOC
-#define LED0 GPIO_PIN_0
-#define PORT_LED1 GPIOC
-#define LED1 GPIO_PIN_1
-#define PORT_LED2 GPIOC
-#define LED2 GPIO_PIN_2
-#define PORT_WIZ_CS GPIOC
-#define WIZ_CS GPIO_PIN_5
-#define PORT_WIZ_RS GPIOB
-#define WIZ_RS GPIO_PIN_5
-#define PORT_WIZ_IN GPIOB
-#define WIZ_IN GPIO_PIN_5
-#define SPI_FRAME_SIZE 7
-#define SPI_TIME_OUT 1000
+
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -72,10 +59,20 @@ void Error_Handler(void);
 
 /* Private defines -----------------------------------------------------------*/
 /* USER CODE BEGIN Private defines */
-#define W5500_CS_Pin GPIO_PIN_5
-#define W5500_CS_GPIO_Port GPIOC
-#define ULED_Pin GPIO_PIN_2
-#define ULED_GPIO_Port GPIOD
+#define PORT_LED0 			GPIOC
+#define LED0 						GPIO_PIN_0
+#define PORT_LED1 			GPIOC
+#define LED1 						GPIO_PIN_1
+#define PORT_LED2 			GPIOC
+#define LED2 						GPIO_PIN_2
+#define PORT_WIZ_CS 		GPIOC
+#define WIZ_CS 					GPIO_PIN_5
+#define PORT_WIZ_RS 		GPIOB
+#define WIZ_RS 					GPIO_PIN_5
+#define PORT_WIZ_IN 		GPIOB
+#define WIZ_IN 					GPIO_PIN_5
+#define SPI_FRAME_SIZE 	7
+#define SPI_TIME_OUT 		1000
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

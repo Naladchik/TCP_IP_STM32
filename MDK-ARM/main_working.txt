@@ -98,23 +98,19 @@ void SWO_Printn(const uint8_t num) {
 
 
 void W5500_Select(void) {
-    HAL_GPIO_WritePin(PORT_WIZ_CS, WIZ_CS, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(W5500_CS_GPIO_Port, W5500_CS_Pin, GPIO_PIN_RESET);
 }
 
 void W5500_Unselect(void) {
-    HAL_GPIO_WritePin(PORT_WIZ_CS, WIZ_CS, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(W5500_CS_GPIO_Port, W5500_CS_Pin, GPIO_PIN_SET);
 }
 
 void W5500_ReadBuff(uint8_t* buff, uint16_t len) {
-		//W5500_Select();
     HAL_SPI_Receive(&hspi1, buff, len, HAL_MAX_DELAY);
-		//W5500_Unselect();
 }
 
 void W5500_WriteBuff(uint8_t* buff, uint16_t len) {
-		//W5500_Select();
     HAL_SPI_Transmit(&hspi1, buff, len, HAL_MAX_DELAY);
-		//W5500_Unselect();
 }
 
 uint8_t W5500_ReadByte(void) {
@@ -127,14 +123,149 @@ void W5500_WriteByte(uint8_t byte) {
     W5500_WriteBuff(&byte, sizeof(byte));
 }
 
+volatile bool ip_assigned = false;
+
+void Callback_IPAssigned(void) {
+    SWO_Printf("Callback: IP assigned! Leased time: %d sec\r\n");
+    ip_assigned = true;
+}
+ 
+void Callback_IPConflict(void) {
+    SWO_Printf("Callback: IP conflict!\r\n");
+}
+
+// 1K should be enough, see https://forum.wiznet.io/t/topic/1612/2
+uint8_t dhcp_buffer[1024];
+// 1K seems to be enough for this buffer as well
+uint8_t dns_buffer[1024];
 
 void init() {
+    SWO_Printf("\r\ninit() called!\r\n");
+
+    SWO_Printf("Registering W5500 callbacks...\r\n");
     reg_wizchip_cs_cbfunc(W5500_Select, W5500_Unselect);
     reg_wizchip_spi_cbfunc(W5500_ReadByte, W5500_WriteByte);
     reg_wizchip_spiburst_cbfunc(W5500_ReadBuff, W5500_WriteBuff);
 
+    SWO_Printf("Calling wizchip_init()...\r\n");
     uint8_t rx_tx_buff_sizes[] = {2, 2, 2, 2, 2, 2, 2, 2};
     wizchip_init(rx_tx_buff_sizes, rx_tx_buff_sizes);
+
+    SWO_Printf("Calling DHCP_init()...\r\n");
+    wiz_NetInfo net_info = {
+        .mac  = { 0xEA, 0x11, 0x22, 0x33, 0x44, 0xEA },
+        .dhcp = NETINFO_DHCP
+    };
+    // set MAC address before using DHCP
+    setSHAR(net_info.mac);
+    DHCP_init(DHCP_SOCKET, dhcp_buffer);
+
+    SWO_Printf("Registering DHCP callbacks...\r\n");
+    reg_dhcp_cbfunc(
+        Callback_IPAssigned,
+        Callback_IPAssigned,
+        Callback_IPConflict
+    );
+
+    SWO_Printf("Calling DHCP_run()...\r\n");
+    // actually should be called in a loop, e.g. by timer
+    uint32_t ctr = 10000;
+    while((!ip_assigned) && (ctr > 0)) {
+        DHCP_run();
+        ctr--;
+    }
+    if(!ip_assigned) {
+        SWO_Printf("\r\nIP was not assigned :(\r\n");
+        return;
+    }
+
+    getIPfromDHCP(net_info.ip);
+    getGWfromDHCP(net_info.gw);
+    getSNfromDHCP(net_info.sn);
+
+    uint8_t dns[4];
+    getDNSfromDHCP(dns);
+
+    SWO_Printf("IP:  %d.%d.%d.%d\r\nGW:  %d.%d.%d.%d\r\nNet: %d.%d.%d.%d\r\nDNS: %d.%d.%d.%d\r\n");
+		SWO_Printn(net_info.ip[0]); SWO_Printn(net_info.ip[1]); SWO_Printn(net_info.ip[2]); SWO_Printn(net_info.ip[3]); SWO_Printf("\n");
+    SWO_Printn(net_info.gw[0]); SWO_Printn(net_info.gw[1]); SWO_Printn(net_info.gw[2]); SWO_Printn(net_info.gw[3]); SWO_Printf("\n");
+    SWO_Printn(net_info.sn[0]); SWO_Printn(net_info.sn[1]); SWO_Printn(net_info.sn[2]); SWO_Printn(net_info.sn[3]); SWO_Printf("\n");
+    SWO_Printn(dns[0]); 				SWO_Printn(dns[1]); 				SWO_Printn(dns[2]); 				SWO_Printn(dns[3]); 				SWO_Printf("\n");
+
+    SWO_Printf("Calling wizchip_setnetinfo()...\r\n");
+    wizchip_setnetinfo(&net_info);
+
+    SWO_Printf("Calling DNS_init()...\r\n");
+    DNS_init(DNS_SOCKET, dns_buffer);
+
+    uint8_t addr[4];
+    {
+        char domain_name[] = "eax.me";
+        SWO_Printf("Resolving domain name \"%s\"...\r\n");
+        int8_t res = DNS_run(dns, (uint8_t*)&domain_name, addr);
+        if(res != 1) {
+            SWO_Printf("DNS_run() failed, res = %d");
+            return;
+        }
+        SWO_Printf("Result: %d.%d.%d.%d\r\n");
+    }
+
+    SWO_Printf("Creating socket...\r\n");
+    uint8_t http_socket = HTTP_SOCKET;
+    uint8_t code = socket(http_socket, Sn_MR_TCP, 10888, 0);
+    if(code != http_socket) {
+        SWO_Printf("socket() failed, code = %d\r\n");
+        return;
+    }
+
+    SWO_Printf("Socket created, connecting...\r\n");
+    code = connect(http_socket, addr, 80);
+    if(code != SOCK_OK) {
+        SWO_Printf("connect() failed, code = %d\r\n");
+        close(http_socket);
+        return;
+    }
+
+    SWO_Printf("Connected, sending HTTP request...\r\n");
+    {
+        char req[] = "GET / HTTP/1.0\r\nHost: eax.me\r\n\r\n";
+        uint16_t len = sizeof(req) - 1;
+        uint8_t* buff = (uint8_t*)&req;
+        while(len > 0) {
+            SWO_Printf("Sending %d bytes...\r\n");
+            int32_t nbytes = send(http_socket, buff, len);
+            if(nbytes <= 0) {
+                SWO_Printf("send() failed, %d returned\r\n");
+                close(http_socket);
+                return;
+            }
+            SWO_Printf("%d bytes sent!\r\n");
+            len -= nbytes;
+        }
+    }
+
+    SWO_Printf("Request sent. Reading response...\r\n");
+    {
+        char buff[32];
+        for(;;) {
+            int32_t nbytes = recv(http_socket, (uint8_t*)&buff, sizeof(buff)-1);
+            if(nbytes == SOCKERR_SOCKSTATUS) {
+                SWO_Printf("\r\nConnection closed.\r\n");
+                break;
+            }
+
+            if(nbytes <= 0) {
+                SWO_Printf("\r\nrecv() failed, %d returned\r\n");
+                break;
+            }
+
+            buff[nbytes] = '\0';
+            SWO_Printf("%s");
+        }
+    }
+
+    SWO_Printf("Closing socket.\r\n");
+    close(http_socket);
 }
 
 void loop() {
@@ -173,6 +304,7 @@ int main(void)
   MX_GPIO_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+	//init();
 	HAL_GPIO_WritePin(PORT_LED0, LED0, GPIO_PIN_SET);
 	HAL_Delay(100);
 	HAL_GPIO_WritePin(PORT_LED0, LED0, GPIO_PIN_RESET);
@@ -191,6 +323,7 @@ int main(void)
 	uint8_t rx_buff[SPI_FRAME_SIZE] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 	uint8_t* p  = tx_buff;
 	
+	
 	while(1){
 	p  = tx_buff;
 	*p++ = 0x00;	*p++ = 0x2e;	//address phase
@@ -202,47 +335,64 @@ int main(void)
 	}
 	HAL_GPIO_WritePin(PORT_LED0, LED0, GPIO_PIN_SET);
 
-	init();
-	uint8_t gw[4] = {1, 1, 1, 1};
-	uint8_t 	sn[4] = {255, 255, 255, 0};
-	uint8_t 	sip[4] = {192, 168, 100, 51};
-  uint8_t mac[6] = {0xa4, 0x03, 0x26, 0xa7, 0x44, 0x01};
-	 setSHAR(mac);
-   setGAR(gw);
-   setSUBR(sn);
-   setSIPR(sip);
 	
-	uint8_t 	srv_ip[4] = {192, 168, 100, 50};
-	uint8_t sc_nr = 0;
-	uint16_t port = 502;
-	socket(sc_nr, Sn_MR_TCP, port, SF_TCP_NODELAY);
-	if(connect(sc_nr, srv_ip, port) == SOCK_OK) HAL_GPIO_WritePin(PORT_LED1, LED1, GPIO_PIN_SET);
-	#define P_LEN 7
-	uint8_t pack[P_LEN] = {'z', 'a', 'l', 'u', 'p', 'a', ' '};
-	//close(sc_nr);
+	//set Gateway address
+	p  = tx_buff;
+	*p++ = 0x00;	*p++ = 0x01;	//address phase
+	*p++ = 0x00 | 0x04 | 0x03; //control phase (4 bytes)
+	*p++ = 0x01; *p++ = 0x01; *p++ = 0x01;  *p++ = 0x01;  //data phase
+	HAL_SPI_TransmitReceive(&hspi1, tx_buff, rx_buff ,SPI_FRAME_SIZE, SPI_TIME_OUT);
+	
+	//set Subnet mask
+	p  = tx_buff;
+	*p++ = 0x00;	*p++ = 0x05;	//address phase
+	*p++ = 0x00 | 0x04 | 0x03; //control phase (4 bytes)
+	*p++ = 0xff; *p++ = 0xff; *p++ = 0xff;  *p++ = 0x00;  //data phase
+	HAL_SPI_TransmitReceive(&hspi1, tx_buff, rx_buff , SPI_FRAME_SIZE, SPI_TIME_OUT);
+	
+	//set MAC
+	p  = tx_buff;
+	*p++ = 0x00;	*p++ = 0x09;	//address phase
+	*p++ = 0x00 | 0x04 | 0x03; //control phase (4 bytes)
+	*p++ = 0xa4; *p++ = 0x03; *p++ = 0x26;  *p++ = 0xa7;  //data phase
+	HAL_SPI_TransmitReceive(&hspi1, tx_buff, rx_buff , SPI_FRAME_SIZE, SPI_TIME_OUT);
+	p  = tx_buff;
+	*p++ = 0x00;	*p++ = 0x0d;	//address phase
+	*p++ = 0x00 | 0x04 | 0x02; //control phase (2 bytes)
+	*p++ = 0x44; *p++ = 0x01;  //data phase
+	HAL_SPI_TransmitReceive(&hspi1, tx_buff, rx_buff , 5, SPI_TIME_OUT);
+	
+	//set IP
+	p  = tx_buff;
+	*p++ = 0x00;	*p++ = 0x0f;	//address phase
+	*p++ = 0x00 | 0x04 | 0x03; //control phase (4 bytes)
+	*p++ = 192; *p++ = 168; *p++ = 100;  *p++ = 51;  //data phase
+	HAL_SPI_TransmitReceive(&hspi1, tx_buff, rx_buff ,SPI_FRAME_SIZE, SPI_TIME_OUT);
+	
+	//read IP
+	p  = tx_buff;
+	*p++ = 0x00;	*p++ = 0x0f;	//address phase
+	*p++ = 0x00 | 0x00 | 0x03; //control phase (4 bytes)
+	*p++ = 0x00; *p++ = 0x00; *p++ = 0x000;  *p++ = 0x00;  //data phase
+	HAL_SPI_TransmitReceive(&hspi1, tx_buff, rx_buff ,SPI_FRAME_SIZE, SPI_TIME_OUT);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		//send(sc_nr, pack, P_LEN - 1);
-		//HAL_Delay(1000);
-		pack[0] = 'g'; pack[1] = 'o'; pack[2] = 'v'; pack[3] = 'n'; pack[4] = 'o';
-		send(sc_nr, pack, P_LEN - 2);
-		HAL_Delay(1000);
-		pack[0] = 'z'; pack[1] = 'h'; pack[2] = 'o'; pack[3] = 'p'; pack[4] = 'a';
-		send(sc_nr, pack, P_LEN - 2);
-		HAL_Delay(1000);
-		pack[0] = 'b'; pack[1] = 'a'; pack[2] = 'r'; pack[3] = 'e'; pack[4] = 'b'; pack[5] = 'u'; pack[6] = 'h';
-		send(sc_nr, pack, P_LEN);
-		HAL_Delay(1000);
-		pack[0] = 's'; pack[1] = 'u'; pack[2] = 'k'; pack[3] = 'a';
-		send(sc_nr, pack, P_LEN - 3);
-		HAL_Delay(1000);
-		
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
+		p  = tx_buff;
+		*p++ = 0x00;	*p++ = 0x2e;	//address phase
+		*p++ = 0x00 | 0x00 | 0x01; //control phase (1 bytes)
+		*p++ = 0x00;//data phase
+		HAL_SPI_TransmitReceive(&hspi1, tx_buff, rx_buff ,4, SPI_TIME_OUT);
+		if((rx_buff[3] & 0x01) != 0) 
+			HAL_GPIO_WritePin(PORT_LED0, LED0, GPIO_PIN_SET);
+		else
+			HAL_GPIO_WritePin(PORT_LED0, LED0, GPIO_PIN_RESET);
+		HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
@@ -421,3 +571,41 @@ void assert_failed(uint8_t *file, uint32_t line)
 #endif /* USE_FULL_ASSERT */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+
+
+main.h
+
+/* Exported macro ------------------------------------------------------------*/
+/* USER CODE BEGIN EM */
+#define PORT_LED0 GPIOC
+#define LED0 GPIO_PIN_0
+#define PORT_LED1 GPIOC
+#define LED1 GPIO_PIN_1
+#define PORT_LED2 GPIOC
+#define LED2 GPIO_PIN_2
+#define PORT_WIZ_CS GPIOC
+#define WIZ_CS GPIO_PIN_5
+#define PORT_WIZ_RS GPIOB
+#define WIZ_RS GPIO_PIN_5
+#define PORT_WIZ_IN GPIOB
+#define WIZ_IN GPIO_PIN_5
+#define SPI_FRAME_SIZE 7
+#define SPI_TIME_OUT 1000
+/* USER CODE END EM */
+
+/* Exported functions prototypes ---------------------------------------------*/
+void Error_Handler(void);
+
+/* USER CODE BEGIN EFP */
+
+/* USER CODE END EFP */
+
+/* Private defines -----------------------------------------------------------*/
+/* USER CODE BEGIN Private defines */
+#define W5500_CS_Pin GPIO_PIN_5
+#define W5500_CS_GPIO_Port GPIOC
+#define ULED_Pin GPIO_PIN_2
+#define ULED_GPIO_Port GPIOD
+/* USER CODE END Private defines */
+
+

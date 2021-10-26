@@ -2,7 +2,7 @@
 import select
 import socket
 
-SERVER_ADDRESS = ('192.168.100.50', 9099)
+SERVER_ADDRESS = ('192.168.100.50', 502)
 
 # Говорит о том, сколько дескрипторов единовременно могут быть открыты
 MAX_CONNECTIONS = 10
@@ -53,7 +53,8 @@ def handle_readables(readables, server):
             if data:
 
                 # Вывод полученных данных на консоль
-                print("getting data: {data}".format(data=list(data)))
+                #print("getting data: {data}".format(data=list(data)))
+                print("getting data: " + str(data))
 
                 # Говорим о том, что мы будем еще и писать в данный сокет
                 if resource not in OUTPUTS:
