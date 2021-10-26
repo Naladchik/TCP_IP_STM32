@@ -98,7 +98,7 @@ if __name__ == '__main__':
     print("server is running, please, press ctrl+c to stop")
     try:
         while INPUTS:
-            readables, writables, exceptional = select.select(INPUTS, OUTPUTS, INPUTS)
+            readables, writables, exceptional = select.select(INPUTS, OUTPUTS, INPUTS, 1.0)
             handle_readables(readables, server_socket)
           #  handle_writables(writables)
     except KeyboardInterrupt:
