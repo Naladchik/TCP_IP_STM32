@@ -230,16 +230,16 @@ int main(void)
 		//HAL_Delay(1000);
 		pack[0] = 'g'; pack[1] = 'o'; pack[2] = 'v'; pack[3] = 'n'; pack[4] = 'o';
 		send(sc_nr, pack, P_LEN - 2);
-		HAL_Delay(1000);
+		//HAL_Delay(10);
 		pack[0] = 'z'; pack[1] = 'h'; pack[2] = 'o'; pack[3] = 'p'; pack[4] = 'a';
 		send(sc_nr, pack, P_LEN - 2);
-		HAL_Delay(1000);
+		//HAL_Delay(10);
 		pack[0] = 'b'; pack[1] = 'a'; pack[2] = 'r'; pack[3] = 'e'; pack[4] = 'b'; pack[5] = 'u'; pack[6] = 'h';
 		send(sc_nr, pack, P_LEN);
-		HAL_Delay(1000);
+		//HAL_Delay(10);
 		pack[0] = 's'; pack[1] = 'u'; pack[2] = 'k'; pack[3] = 'a';
 		send(sc_nr, pack, P_LEN - 3);
-		HAL_Delay(1000);
+		//HAL_Delay(10);
 		
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */

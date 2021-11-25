@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;   ../Drivers/STM32F1xx_HAL_Driver/Inc;   ../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;   ../Drivers/CMSIS/Device/ST/STM32F1xx/Include;   ../Drivers/CMSIS/Include;   ..\WizneLib\Ethernet;   ..\WizneLib\Ethernet\W5500;   ..\WizneLib\Internet\DHCP;   ..\WizneLib\Internet\DNS;   ..\WizneLib\Internet\httpServer</IncludePath>
+              <IncludePath>../Core/Inc;    ../Drivers/STM32F1xx_HAL_Driver/Inc;    ../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;    ../Drivers/CMSIS/Device/ST/STM32F1xx/Include;    ../Drivers/CMSIS/Include;    ..\WizneLib\Ethernet;    ..\WizneLib\Ethernet\W5500;    ..\WizneLib\Internet\DHCP;    ..\WizneLib\Internet\DNS;    ..\WizneLib\Internet\httpServer</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -517,16 +517,6 @@
               <FileName>wizchip_conf.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\WizneLib\Ethernet\wizchip_conf.c</FilePath>
-            </File>
-            <File>
-              <FileName>dhcp.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\WizneLib\Internet\DHCP\dhcp.c</FilePath>
-            </File>
-            <File>
-              <FileName>dns.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\WizneLib\Internet\DNS\dns.c</FilePath>
             </File>
           </Files>
         </Group>
